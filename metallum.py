@@ -1,71 +1,71 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 
-import argparse, json, re, sys
-try:
-    import urllib2 as urlreq
-    from urllib import urlencode
-except:
-    import urllib.request as urlreq
-    from urllib.parse import urlencode
+import argparse
+import re
+import sys
+from curl_cffi import requests
 
 base_url = 'https://www.metal-archives.com/'
 url_search_songs = 'search/ajax-advanced/searching/songs?'
 url_lyrics = 'release/ajax-view-lyrics/id/'
-lyrics_not_available = '(lyrics not available)'
-lyric_id_re = re.compile(r'id=.+[a-z]+.(?P<id>\d+)')
-band_name_re = re.compile(r'title="(?P<name>.*)\"')
 tags_re = re.compile(r'<[^>]+>')
-headers = {'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64; rv:95.0) Gecko/20100101 Firefox/95.0'}
 
-def get_songs_data(band_name, song_title):
-    """Search on metal-archives for song coincidences"""
-    params = dict(bandName = band_name, songTitle = song_title)
-    url = base_url + url_search_songs + urlencode(params)
-    req = urlreq.Request(url, headers=headers)
-    return json.load(urlreq.urlopen(req))['aaData']
-
-def get_lyrics_by_song_id(song_id):
-    """Search on metal-archives for lyrics based on song_id"""
-    url = base_url + url_lyrics + song_id
-    req = urlreq.Request(url, headers=headers)
-    return tags_re.sub('', urlreq.urlopen(req).read().strip().decode('utf-8'))
-
-def iterate_songs_and_print(songs, args):
-    '''Iterate over returned song matches. If the lyrics are different than\
-    "(lyrics not available)" then break the loop and print them out.\
-    Otherwise the last song of the list will be printed.'''
-    for song in songs:
-        band_name = band_name_re.search(song[0]).group("name")
-        song_title = song[3]
-        song_id = lyric_id_re.search(song[4]).group("id")
-        lyrics = get_lyrics_by_song_id(song_id)
-        if lyrics != lyrics_not_available:
-            break
-
-    title = band_name + " - " + song_title + "\n"
-
-    if args.notitle:
-        sys.exit("\033[0m" + lyrics + "\n")
-    else:
-        underline = "\033[4m"
-        sys.exit(underline + title + "\n\033[0m" + lyrics + "\n")
-
-def main():
-    """Runs the program and handles command line options"""
-    parser = argparse.ArgumentParser(description='Fetch lyrics from https://metal-archives.com')
-    parser.add_argument('-t', '--notitle', action="store_true", help="don't show the artist and song names before the lyrics")
-    parser.add_argument('band_name', type=str, help='The name of the band. e.g.: "Dark Reality"')
-    parser.add_argument('song_title', type=str, help='The title of the song. e.g.: "Mopin Carol"')
+def get_lyrics():
+    parser = argparse.ArgumentParser(description='Metallum Lyrics Fix')
+    parser.add_argument('band', type=str)
+    parser.add_argument('song', type=str)
     args = parser.parse_args()
 
-    try:
-        songs_data = get_songs_data(args.band_name, args.song_title)
-        if len(songs_data):
-            iterate_songs_and_print(songs_data, args)
-    except Exception as e:
-        sys.exit(e)
+    # Wir nutzen wieder curl_cffi für das TLS-Fingerprinting
+    session = requests.Session(impersonate="chrome120")
 
-    sys.exit("\n\033[031m Lyrics not found\n")
+    try:
+        # 1. Suche ausführen
+        params = {'bandName': args.band, 'songTitle': args.song}
+        search_response = session.get(base_url + url_search_songs, params=params)
+        
+        if search_response.status_code == 403:
+            sys.exit("Fehler: HTTP 403. Cloudflare blockiert die Anfrage weiterhin.")
+            
+        data = search_response.json()
+        
+        if not data.get('aaData'):
+            sys.exit("Keine Songs gefunden.")
+
+        # 2. Song ID extrahieren
+        # Wir nehmen den ersten Treffer
+        first_song_row = data['aaData'][0]
+        
+        # Das Feld mit der ID ist üblicherweise das letzte (Index 4)
+        # Es sieht oft so aus: <a href="..." id="lyricLink_12345">Lyrics</a>
+        # Wir suchen einfach nach der ersten längeren Zahl im HTML-String dieses Feldes
+        id_field = first_song_row[4]
+        id_match = re.search(r'(\d+)', id_field)
+
+        if not id_match:
+            # Debug-Hilfe: Falls es scheitert, zeig uns, was im Feld steht
+            sys.exit(f"ID konnte im Feld nicht gefunden werden. Inhalt: {id_field}")
+            
+        song_id = id_match.group(1)
+
+        # 3. Lyrics abrufen
+        lyrics_response = session.get(base_url + url_lyrics + song_id)
+        
+        # Säuberung: HTML-Tags weg, Sonderzeichen fixen
+        lyrics = tags_re.sub('', lyrics_response.text).strip()
+        
+        # Bandname (aus Feld 0) und Songtitel (aus Feld 3) extrahieren
+        display_band = tags_re.sub('', first_song_row[0]).strip()
+        display_song = first_song_row[3]
+        
+        print(f"\n\033[1;4m{display_band} - {display_song}\033[0m")
+        if not lyrics or lyrics == "(lyrics not available)":
+            print("\nLyrics für diesen Song sind leider nicht verfügbar.")
+        else:
+            print(f"\n{lyrics}\n")
+
+    except Exception as e:
+        sys.exit(f"Ein unerwarteter Fehler ist aufgetreten: {e}")
 
 if __name__ == '__main__':
-    main()
+    get_lyrics()
