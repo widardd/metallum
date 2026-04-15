@@ -1,0 +1,2 @@
+mutagen
+curl_cffi

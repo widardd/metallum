@@ -1,20 +1,11 @@
 # Metallum
 
-[![npm-image](https://img.shields.io/npm/v/metallum.svg)](https://www.npmjs.com/package/metallum)
-![license-image](https://img.shields.io/npm/l/metallum.svg)
-
 Fetch lyrics from [metal-archives.com](https://www.metal-archives.com) using the command-line.
 
 <img src="screenshot.gif" width="613">
 
 ## Install
 Ensure you have [python](https://www.python.org/) installed.
-
-### NPM
-
-```sh
-$ npm install --global metallum
-```
 
 ### Manual Install
 
@@ -44,6 +35,7 @@ By default it will show the artist and song names before the lyrics. To only dis
 ### Arguments
 ```
 usage: metallum.py [-h] [-t] band_name song_title
+       metallum.py [-h] [-t] -j Path-to-music-folder
 
 Fetch lyrics from https://metal-archives.com
 
@@ -52,8 +44,9 @@ positional arguments:
   song_title     The title of the song. e.g.: "Mopin Carol"
 
 optional arguments:
-  -h, --help     show this help message and exit
-  -t, --notitle  Don't show title.
+  -h, --help            show this help message and exit
+  -t, --notitle         Don't show title.
+  -j, --jellyfin [PATH] Get lyrics for an entire folder and create txt-files for jellyfin
 ```
 
 ### Don’t type the whole thing
