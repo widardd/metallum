@@ -1,2 +1,12 @@
 *.swp
 .DS_Store
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+ENV/
+build/
+dist/
+*.spec
+.vscode/
